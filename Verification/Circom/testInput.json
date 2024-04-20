@@ -1,0 +1,5 @@
+{"netweights": ["1","2","3","4"],
+ "bias": ["1", "2"],
+ "realTargets": ["1","0"],
+ "trainDataset": ["1","4"]
+}

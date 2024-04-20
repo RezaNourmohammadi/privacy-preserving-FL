@@ -1,0 +1,223 @@
+import "utils/casts/field_to_u32" as field_to_u32;
+import "utils/casts/u32_to_field" as u32_to_field;
+import "utils/casts/field_to_u64" as field_to_u64;
+import "utils/casts/u64_to_field" as u64_to_field;
+
+const field max = 0-1;
+const field threshold= 20888242871839275222246405745257275088548364400416034343698204186575808495617;
+const u32  fe = 9;
+const u32  ac = 6;
+const field ac_f=6;
+const u32  bs = 5;
+
+def add(field a,field b,field a_sign,field b_sign)-> field[2]{
+    field a_cleansed = if a_sign==0 {a} else {max-a+1};
+    field b_cleansed = if b_sign==0 {b} else {max-b+1};
+    field c = if a_sign == b_sign && a_sign == 1 {max+1-a_cleansed-b_cleansed} else {a+b};
+    field c_sign = if c > threshold {1} else {0};
+    return [c, c_sign];
+}
+
+def subtract(field a,field b,field a_sign,field b_sign)-> field[2]{
+    field a_cleansed = if a_sign==0 {a} else {max-a+1};
+    field b_cleansed = if b_sign==0 {b} else {max-b+1};
+    field c = if a_sign != b_sign && a_sign==0  {a_cleansed+b_cleansed} else {a-b};
+    field d = if c > threshold {1} else {0};
+    return [c, d];
+}
+
+
+def divide(field a, field b,field a_sign,field b_sign) -> field[2]{
+    field  mut a_cleansed = if a_sign==0 {a} else {max-a+1};
+    field b_cleansed = if b_sign==0 {b} else {max-b+1};
+    u64 a_u64 =field_to_u64(a_cleansed);
+    u64 b_u64 = field_to_u64(b_cleansed);
+    u64 remainder = a_u64%b_u64;
+    a_cleansed = u64_to_field(a_u64-remainder);
+    field mut res = a_cleansed/b_cleansed;
+    field sign = if a_sign==b_sign || res==0 {0} else {1};
+    res = if sign == 0 {res} else {max+1-res};
+    return [res, sign];
+}
+
+def multiply(field a, field b,field a_sign,field  b_sign) -> field[2]{
+    field a_cleansed = if a_sign==0 {a} else {max-a+1};
+    field b_cleansed = if b_sign==0 {b} else {max-b+1};
+    field mut res = a_cleansed*b_cleansed;
+    field sign = if a_sign==b_sign || res==0 {0} else {1};
+    res = if sign==0 {res} else {max-res+1};
+    return [res, sign];
+}
+
+def mse_prime(field[ac] y_true,field[ac] y_pred,field[ac] y_pred_sign,field pr)->field[2][ac]{
+    field[ac] mut result=[0;ac];
+    field[ac] mut result_sign=[0;ac];
+    field mut x = 0;
+    field[2] mut t = [0;2];
+    field[2] mut t_2 = [0;2];
+    field mut temp = 0;
+    field mut temp_sign = 0;
+    field[2] mut res = [0;2];
+    for u32 i in 0..ac {
+    	x = y_pred_sign[i];
+        t = subtract(y_pred[i],y_true[i],x, 0);
+        temp = t[0];
+        temp_sign = t[1];
+        t_2 = multiply(temp,2,temp_sign,0);
+        //temp = t_2[0];
+        //temp_sign = t_2[1];
+        //(temp,temp_sign) = multiply(temp,2,temp_sign,0);
+        res = divide(temp,ac_f,temp_sign,0);
+        result[i] = res[0];
+        result_sign[i] = res[1];
+    }
+    return [result,result_sign];
+}
+
+
+def forward_propagation_layer(field[ac][fe] w,field[ac] b,field[fe] x,field[ac][fe] w_sign,field[ac] b_sign,field[fe] x_sign,field pr) -> field[2][ac]{
+    field[ac] mut result=b;
+    field[ac] mut result_sign=b_sign;
+    field[ac] mut wx=b;
+    field[ac] mut wx_sign=b;
+    field[2] mut multiplyout = [0;2];
+    field mut t_i = 0;
+    field mut t_i_s = 0;
+    field[2] mut addout = [0;2];
+    field[2] mut divideout = [0;2];
+    for u32 j in 0..ac {
+        field mut temp = 0;
+        field mut temp_sign=0;
+        for u32 i in 0..fe {
+            multiplyout = multiply(w[j][i],x[i],w_sign[j][i],x_sign[i]);
+            t_i = multiplyout[0];
+            t_i_s = multiplyout[1];
+            addout = add(temp,t_i,temp_sign,t_i_s);
+            temp = addout[0];
+            temp_sign = addout[1];
+        }
+        divideout = divide(temp,pr,temp_sign,0);
+        temp = divideout[0];
+        temp_sign = divideout[1];
+        wx[j] = temp;
+        wx_sign[j] = temp_sign;
+    }
+    for u32 i in 0..ac {
+       addout = add(wx[i],b[i],wx_sign[i],b_sign[i]);
+       result[i] = addout[0];
+       result_sign[i] = addout[1];
+    }
+
+    return [result,result_sign];
+}
+
+def backward_propagation_layer_w_1(field[ac][fe] mut w,field[ac] b,field[fe] x,field[ac] output_error,field learning_rate,field pr,field[ac][fe] w_sign,field[ac] b_sign,field[fe] x_sign,field[ac] output_error_sign) -> field[ac][fe]{
+    //field[ac][fe] mut w = [[0;fe];ac];
+    field[2] mut multiplyout = [0;2];
+    field[2] mut divideout = [0;2];
+    field mut temp = 0;
+    field mut temp_sign = 0;
+    field[2] mut subtractout = [0;2];
+    for u32 j in 0..fe {
+        for u32 i in 0..ac {
+            multiplyout = multiply(output_error[i],x[j],output_error_sign[i],x_sign[j]);
+            temp = multiplyout[0];
+            temp_sign = multiplyout[1];
+            divideout = divide(temp,learning_rate,temp_sign,0);
+            temp = divideout[0];
+            temp_sign = divideout[1];
+            divideout = divide(temp,pr,temp_sign,0);
+            temp = divideout[0];
+            temp_sign = divideout[1];
+            subtractout = subtract(w[i][j],temp,w_sign[i][j],temp_sign);
+            w[i][j] = subtractout[0];
+             //w_sign[i][j] = subtractout[1];
+        }
+    }
+    return w;
+}
+
+
+def backward_propagation_layer_w_2(field[ac][fe] w,field[ac] b,field[fe] x,field[ac] output_error,field learning_rate,field pr,field[ac][fe] mut w_sign,field[ac] b_sign,field[fe] x_sign,field[ac] output_error_sign) -> field[ac][fe]{
+    //field[ac][fe] mut w_sign = [[0;fe];ac];
+    field[2] mut multiplyout = [0;2];
+    field[2] mut divideout = [0;2];
+    field[2] mut subtractout = [0;2];
+    field mut temp = 0;
+    field mut temp_sign = 0;
+    for u32 j in 0..fe {
+        for u32 i in 0..ac {
+            multiplyout = multiply(output_error[i],x[j],output_error_sign[i],x_sign[j]);
+            temp = multiplyout[0];
+            temp_sign = multiplyout[1];
+            divideout = divide(temp,learning_rate,temp_sign,0);
+            temp = divideout[0];
+            temp_sign = divideout[1];
+            divideout = divide(temp,pr,temp_sign,0);
+            temp = divideout[0];
+            temp_sign = divideout[1];
+            subtractout = subtract(w[i][j],temp,w_sign[i][j],temp_sign);
+            //w[i][j] = subtractout[0];
+            w_sign[i][j] = subtractout[1];
+        }
+    }
+    return w_sign;
+}
+
+def backward_propagation_layer_b(field[ac][fe] w,field[ac] mut b,field[fe] x,field[ac] output_error,field learning_rate,field pr,field[ac][fe] w_sign,field[ac] mut b_sign,field[fe] x_sign,field[ac] output_error_sign) -> field[2][ac]{
+    //field[ac] mut b = [0;ac];
+    //field[ac] mut b_sign = [0;ac];
+    field[2] mut divideout = [0;2];
+    field[2] mut subtractout = [0;2];
+    field mut temp = 0;
+    field mut temp_sign = 0;
+    for u32 i in 0..ac {
+       divideout = divide(output_error[i],learning_rate,output_error_sign[i],0);
+       temp = divideout[0];
+       temp_sign = divideout[1];
+       subtractout = subtract(b[i],temp,b_sign[i],temp_sign);
+       b[i] = subtractout[0];
+       b_sign[i] = subtractout[1];
+    }
+  return [b,b_sign];
+}
+
+def main(field[ac][fe] mut w,field[ac][fe] mut w_sign,field[ac] mut b,field[ac] mut b_sign, private field [bs][fe] x_train, field[bs][fe] x_train_sign, private field[bs]  y_train,field learning_rate,field pr,field[ac][fe] w_new,field[ac] b_new) -> bool{
+    field[ac] mut y_true = [0;ac];
+    field[fe] mut sample = [0;fe];
+    field[fe] mut sample_sign = [0;fe];
+
+    field[ac][fe] mut new_w = [[0;fe];ac];
+    for u32 batch_idx in 0..bs {
+        sample = x_train[batch_idx];
+        sample_sign = x_train_sign[batch_idx];
+        field idx1=y_train[batch_idx]-1;
+        field mut idx2 = 0;
+        for u32 i in 0..ac {
+           idx2=u32_to_field(i);
+           y_true[i]= if idx1==idx2 {pr} else {0};
+       }
+       field[2][ac] forward_propagation_layer_out = forward_propagation_layer(w, b, sample, w_sign, b_sign, sample_sign, pr);
+       //field [ac] out_sign = forward_propagation_layer_out[1];
+       field[2][ac] mseprimeout = mse_prime(y_true,forward_propagation_layer_out[0],forward_propagation_layer_out[1],pr);
+       field[ac] error = mseprimeout[0];
+       field[ac] error_sign = mseprimeout[1];
+       new_w = backward_propagation_layer_w_1(w,b,sample,error,learning_rate,pr,w_sign,b_sign,sample_sign,mseprimeout[1]);
+       w_sign = backward_propagation_layer_w_1(w,b,sample,error,learning_rate,pr,w_sign,b_sign,sample_sign,error_sign);
+       field[2][ac] backward_propagation_layer_b_out=backward_propagation_layer_b(w,b,sample,error,learning_rate,pr,w_sign,b_sign,sample_sign,error_sign);
+       field[ac] b = backward_propagation_layer_b_out[0];
+       field[ac] b_sign = backward_propagation_layer_b_out[1];
+    }
+    field mut res=0;
+    for u32 i in 0..ac {
+            res = res + if b[i] == b_new[i] {1} else {0};
+    }
+     for u32 j in 0..fe {
+            for u32 i in 0..ac {
+            res = res + if w[i][j] == w_new[i][j] {1} else {0};
+            }
+    }
+
+    bool mut output = if res == u32_to_field(ac+fe*ac) {true} else {false};
+    return output;
+}

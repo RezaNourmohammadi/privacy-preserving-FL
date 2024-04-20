@@ -1,0 +1,118 @@
+{
+  "inputs": [
+    {
+      "name": "w",
+      "public": true,
+      "type": "array",
+      "components": {
+        "size": 6,
+        "type": "array",
+        "components": {
+          "size": 9,
+          "type": "field"
+        }
+      }
+    },
+    {
+      "name": "w_sign",
+      "public": true,
+      "type": "array",
+      "components": {
+        "size": 6,
+        "type": "array",
+        "components": {
+          "size": 9,
+          "type": "field"
+        }
+      }
+    },
+    {
+      "name": "b",
+      "public": true,
+      "type": "array",
+      "components": {
+        "size": 6,
+        "type": "field"
+      }
+    },
+    {
+      "name": "b_sign",
+      "public": true,
+      "type": "array",
+      "components": {
+        "size": 6,
+        "type": "field"
+      }
+    },
+    {
+      "name": "x_train",
+      "public": false,
+      "type": "array",
+      "components": {
+        "size": 10,
+        "type": "array",
+        "components": {
+          "size": 9,
+          "type": "field"
+        }
+      }
+    },
+    {
+      "name": "x_train_sign",
+      "public": false,
+      "type": "array",
+      "components": {
+        "size": 10,
+        "type": "array",
+        "components": {
+          "size": 9,
+          "type": "field"
+        }
+      }
+    },
+    {
+      "name": "y_train",
+      "public": false,
+      "type": "array",
+      "components": {
+        "size": 10,
+        "type": "field"
+      }
+    },
+    {
+      "name": "learning_rate",
+      "public": true,
+      "type": "field"
+    },
+    {
+      "name": "pr",
+      "public": true,
+      "type": "field"
+    },
+    {
+      "name": "w_new",
+      "public": true,
+      "type": "array",
+      "components": {
+        "size": 6,
+        "type": "array",
+        "components": {
+          "size": 9,
+          "type": "field"
+        }
+      }
+    },
+    {
+      "name": "b_new",
+      "public": true,
+      "type": "array",
+      "components": {
+        "size": 6,
+        "type": "field"
+      }
+    }
+  ],
+  "output": {
+    "type": "bool"
+  }
+}
